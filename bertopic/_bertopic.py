@@ -3567,6 +3567,18 @@ class BERTopic:
         compare them through cosine similarity with the document embeddings.
         If they pass the `self.zeroshot_min_similarity` threshold, they are assigned.
 
+        ####### Patched Changes #######
+        Original implementation chooses the best matching candidate label for each document, if the similarity exceeds a
+        threshold. The function returns a 4-tuple, with the first pair being unmatched documents and embeddings, and the
+        second pair is those that were matched. Assigned documents have their assigned topic attached to them.
+
+        The patched implementation allows for assigning documents to all matching candidate labels. That is, all candidate
+        labels for which the similarity exceeds a threshold. Because BERTopic only supports one topic per document, the
+        solution is to copy documents as necessary to assign them to more than one topic. BERTopic's representation of
+        documents is separate from outside BERTopic, so information must be saved to know how this copying was done.
+        More post-processing must be made to combine the copied documents later on.
+        ###############################
+
         Arguments:
             documents: Dataframe with documents and their corresponding IDs
             embeddings: The document embeddings
@@ -3575,34 +3587,95 @@ class BERTopic:
             documents: The leftover documents that were not assigned to any topic
             embeddings: The leftover embeddings that were not assigned to any topic
         """
-        logger.info("Zeroshot Step 1 - Finding documents that could be assigned to either one of the zero-shot topics")
+        logger.info(f"Zeroshot Step 1 - Finding documents that could be assigned to zero-shot topics with threshold {self.zeroshot_min_similarity}")
         # Similarity between document and zero-shot topic embeddings
         zeroshot_embeddings = self._extract_embeddings(self.zeroshot_topic_list)
         cosine_similarities = cosine_similarity(embeddings, zeroshot_embeddings)
-        assignment = np.argmax(cosine_similarities, 1)
-        assignment_vals = np.max(cosine_similarities, 1)
-        assigned_ids = [index for index, value in enumerate(assignment_vals) if value >= self.zeroshot_min_similarity]
-        non_assigned_ids = [index for index, value in enumerate(assignment_vals) if value < self.zeroshot_min_similarity]
 
-        # Check that if a number of topics was specified, it exceeds the number of zeroshot topics matched
-        num_zeroshot_topics = len(assignment_vals.unique())
-        if self.nr_topics and not self.nr_topics > num_zeroshot_topics:
-            raise ValueError(f'The set nr_topics ({self.nr_topics}) must exceed the number of matched zero-shot topics '
-                             f'({num_zeroshot_topics}). Consider raising nr_topics or raising the '
-                             f'zeroshot_min_similarity ({self.zeroshot_min_similarity}).')
+        ####### Patched Changes #######
 
-        # Assign topics
-        assigned_documents = documents.iloc[assigned_ids]
-        assigned_documents["Topic"] = [topic for topic in assignment[assigned_ids]]
+        # find which documents can be assigned to zeroshot topics
+        matches = cosine_similarities >= self.zeroshot_min_similarity
+        # how many zeroshot topics did each document match with
+        num_matches_per_doc = np.sum(matches, axis=1)
+        num_zeroshot_matches = matches.max(axis=0).sum()
+        logger.info(f'Zeroshot: {np.count_nonzero(num_matches_per_doc)}/{len(documents)} documents have been assigned to at '
+                    f'least one candidate label')
+        logger.info(f'Zeroshot: {sum(num_matches_per_doc > 1)}/{len(documents)} documents have matched at least two '
+                    f'candidate labels')
+        logger.info(f'Zeroshot: maximum number of zeroshot topics matched with a document: {num_matches_per_doc.max()}')
+        logger.info(f'Zeroshot: documents have been matched a total of {sum(num_matches_per_doc)} times')
+        logger.info(f'Zeroshot: {num_zeroshot_matches}/{len(self.zeroshot_topic_list)} zeroshot topics matched')
+
+        # we will need to have this many copies of each document to continue
+        num_copies_per_doc = np.clip(num_matches_per_doc, a_min=1, a_max=None)
+        # copy into the instance variable because variable will be deleted after fitting;
+        # the variable is made and referenced outside the model
+        self.zeroshot_document_multiplier = num_copies_per_doc
+        logger.info(f'Zeroshot: document count will be expanded from {len(documents)} to {sum(num_copies_per_doc)}')
+
+        # copy the document rows an appropriate number of times by exploding according to a list column where the length of
+        # each list is the number of copies needed
+        documents['repeat'] = [list(range(repeat)) for repeat in num_copies_per_doc]
+        expanded_documents = documents.explode('repeat').reset_index(drop=True)
+        expanded_documents.drop('repeat', axis=1)
+        # reset the IDs
+        expanded_documents['ID'] = list(range(len(expanded_documents)))
+
+        # need to know which documents got assigned to zeroshot topics
+        matching_document_idxs = np.flatnonzero(num_matches_per_doc)  # this is using the original documents df
+        num_matches_per_found_doc = num_matches_per_doc[num_matches_per_doc > 0]
+        # Because documents have now been copied, we need to add more idxs,
+        # which can be calculated using an offset from the number of matches.
+        # Every time docs are added, later docs need to be offset by the cumulative sum of earlier added docs when
+        # indexing into expanded_docs.
+        # Example:
+        # We have docs [a, b, c, d]. The number of times matched are [0, 3, 1, 2].
+        # The new docs are [a, b, b, b, c, d, d]. Keep in mind non-matched docs are still needed once at this point.
+        # The idxs of matching docs originally are [1, 2, 3]
+        # The idxs of all matching docs are [1, 2, 3, 4, 5, 6].
+        # The goal is to calculate the new idxs using a cumulative sum of the number of times matched, explained more in the
+        # next comment.
+        cumsum_earlier_added_docs = np.insert(np.cumsum(num_matches_per_found_doc - 1)[:-1], 0, 0)
+        # For each document found, the indices in expanded_docs is a range from the original index (offset by the number of
+        # additional documents up to this point) to that same index plus the number of matches found for that document,
+        # exclusive.
+        # Following the previous example, the cumulative sum for number of times matched per matched doc must be calculated
+        # to know how many docs were added before the current document. For doc d, this does not matter, because it is at
+        # the end. In this case, only doc b had added docs (2 added) that matters. The cumulative sum of added docs before
+        # the current matched doc is [0, 2, 2] for docs [b, c, d].
+        # The new idxs are calculated using the original idx, an offset according to the cumulative sum (which needs to be
+        # subtracted by 1 and shifted, and an offset according to how many times the document must be repeated:
+        # [(1+0+0, 1+0+1, 1+0+2), (2+2+0), (3+2+0, 3+2+1)] -> [(1, 2, 3), (4), (5, 6)] -> [1, 2, 3, 4, 5, 6]
+        # These are the idxs of matched documents in the expanded dataframe containing all documents.
+        matching_document_idxs = sum(
+            [list(range(idx + additional_offset, idx + additional_offset + repeat))
+             for idx, additional_offset, repeat in
+             zip(matching_document_idxs, cumsum_earlier_added_docs, num_matches_per_found_doc)],
+            list())
+
+        # get just the df documents have been assigned
+        assigned_documents = expanded_documents.iloc[matching_document_idxs]
+        # copy their position to be used later when merging the zeroshot model and normal model
         assigned_documents["Old_ID"] = assigned_documents["ID"].copy()
+        # reset the assigned document IDs
         assigned_documents["ID"] = range(len(assigned_documents))
-        assigned_embeddings = embeddings[assigned_ids]
+        # get the zeroshot topic IDs that each matched document was assigned to
+        assn = np.where(matches)[1]
+        assigned_documents["Topic"] = assn
+
+        # copy the embeddings the same way documents were copied
+        embeddings = np.repeat(embeddings, num_copies_per_doc, axis=0)
+        assigned_embeddings = embeddings[matching_document_idxs]
 
         # Select non-assigned topics to be clustered
-        documents = documents.iloc[non_assigned_ids]
+        non_matching_idxs = list(set(expanded_documents.index) - set(assigned_documents.index))
+        documents = expanded_documents.iloc[non_matching_idxs]
         documents["Old_ID"] = documents["ID"].copy()
         documents["ID"] = range(len(documents))
-        embeddings = embeddings[non_assigned_ids]
+        embeddings = embeddings[non_matching_idxs]
+
+        ###############################
 
         logger.info("Zeroshot Step 1 - Completed \u2713")
         return documents, embeddings, assigned_documents, assigned_embeddings
@@ -3614,7 +3687,8 @@ class BERTopic:
         * Embedding model is necessary to convert zero-shot topics to embeddings
         * Zero-shot topics should be defined
         """
-        if self.zeroshot_topic_list is not None and self.embedding_model is not None and type(self.hdbscan_model) != BaseCluster:
+        # TODO how to handle check for type(self.hdbscan_model) != BaseCluster
+        if self.zeroshot_topic_list is not None and self.embedding_model is not None:
             return True
         return False
 
@@ -4061,10 +4135,37 @@ class BERTopic:
         mappings = defaultdict(list)
         for key, val in sorted(mapped_topics.items()):
             mappings[val].append(key)
-        mappings = {topic_from:
-                    {"topics_to": topics_to,
-                     "topic_sizes": [self.topic_sizes_[topic] for topic in topics_to]}
-                    for topic_from, topics_to in mappings.items()}
+
+        ####### Patched Changes #######
+
+        # also gather all candidate label topic names for each group of original topics
+        mappings = {
+            topic_from: {
+                "topics_to": topics_to,
+                "topic_sizes": [self.topic_sizes_[topic] for topic in topics_to],
+                "topic_names": ([self.topic_labels_[topic] for topic in topics_to if
+                                self.topic_labels_[topic] in self.zeroshot_topic_list]
+                                if self.zeroshot_topic_list is not None else list())
+            }
+            for topic_from, topics_to in mappings.items()
+        }
+
+        # Ensure new topics only have at most one copy of a document.
+        # The documents DataFrame is shortened after this step.
+        # self.external_ids must be set externally as a list of IDs for
+        # each document BERTopic is currently fitted on (including duplicates)
+        try:
+            documents['external_id'] = self.external_document_ids
+        except AttributeError:
+            raise AssertionError('Make sure to set topic_model.external_document_ids '
+                                 'before calling topic_model.update_topics().')
+        # get unique topic_id, document_id pairs; keep original order
+        new_topics, self.external_document_ids = list(zip(*dict.fromkeys(zip(new_topics, self.external_document_ids)).keys()))
+        logger.info(f'Number of documents reduced from {len(documents)} to {len(new_topics)} to avoid duplicate documents'
+                    f'within topics after reduction.')
+        indago_id_to_rows = {row['external_id']: row for _, row in documents.iterrows()}
+        documents = pd.DataFrame([indago_id_to_rows[indago_id] for indago_id in self.external_document_ids])
+        documents['ID'] = range(len(documents))  # reset BERTopic document IDs
 
         # Map topics
         documents.Topic = new_topics
@@ -4074,6 +4175,12 @@ class BERTopic:
         # Update representations
         documents = self._sort_mappings_by_frequency(documents)
         self._extract_topics(documents, mappings=mappings)
+        # New topic labels should be list of candidate labels from merged topics.
+        # Cannot pass a dict because empty lists get overridden with generated name.
+        self.set_topic_labels([mappings[topic_id]['topic_names'] for topic_id in self.topic_labels_])
+
+        ###############################
+
         self._update_topic_size(documents)
         return documents
 
