@@ -4181,8 +4181,8 @@ class BERTopic:
                                  'before calling topic_model.update_topics().')
         # get unique topic_id, document_id pairs; keep original order
         new_topics, self.external_document_ids = list(zip(*dict.fromkeys(zip(new_topics, self.external_document_ids)).keys()))
-        logger.info(f'Number of documents reduced from {len(documents)} to {len(new_topics)} to avoid duplicate documents'
-                    f'within topics after reduction.')
+        logger.info(f'Number of documents reduced from {len(documents)} to {len(new_topics)} to avoid duplicate '
+                    f'documents within topics after reduction.')
         indago_id_to_rows = {row['external_id']: row for _, row in documents.iterrows()}
         documents = pd.DataFrame([indago_id_to_rows[indago_id] for indago_id in self.external_document_ids])
         documents['ID'] = range(len(documents))  # reset BERTopic document IDs
