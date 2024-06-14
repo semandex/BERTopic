@@ -4126,9 +4126,9 @@ class BERTopic:
 
         # Cluster the topic embeddings using AgglomerativeClustering
         if version.parse(sklearn_version) >= version.parse("1.4.0"):
-            cluster = AgglomerativeClustering(self.nr_topics - self._outliers, metric="precomputed", linkage="average")
+            cluster = AgglomerativeClustering(self.nr_topics - self._outliers, metric="precomputed", linkage="complete")
         else:
-            cluster = AgglomerativeClustering(self.nr_topics - self._outliers, affinity="precomputed", linkage="average")
+            cluster = AgglomerativeClustering(self.nr_topics - self._outliers, affinity="precomputed", linkage="complete")
         cluster.fit(distance_matrix)
         new_topics = [cluster.labels_[topic] if topic != -1 else -1 for topic in topics]
 
