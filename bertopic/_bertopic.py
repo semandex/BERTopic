@@ -3670,6 +3670,13 @@ class BERTopic:
         embeddings = np.repeat(embeddings, num_copies_per_doc, axis=0)
         assigned_embeddings = embeddings[matching_document_idxs]
 
+        # Check that if a number of topics was specified, it exceeds the number of zeroshot topics matched
+        num_zeroshot_topics = len(assigned_documents["Topic"].unique())
+        if self.nr_topics and not self.nr_topics > num_zeroshot_topics:
+            raise ValueError(f'The set nr_topics ({self.nr_topics}) must exceed the number of matched zero-shot topics '
+                             f'({num_zeroshot_topics}). Consider raising nr_topics or raising the '
+                             f'zeroshot_min_similarity ({self.zeroshot_min_similarity}).')
+
         # Select non-assigned topics to be clustered
         non_matching_idxs = list(set(expanded_documents.index) - set(assigned_documents.index))
         documents = expanded_documents.iloc[non_matching_idxs]
