@@ -4152,22 +4152,24 @@ class BERTopic:
 
         ####### Patched Changes #######
 
+        # Documents may have been duplicated during zero-shot topic modeling to achieve multiple topics per document.
         # Ensure new topics only have at most one copy of a document.
         # The documents DataFrame is shortened after this step.
         # self.external_ids must be set externally as a list of IDs for
         # each document BERTopic is currently fitted on (including duplicates)
-        try:
-            documents['external_id'] = self.external_document_ids
-        except AttributeError:
-            raise AssertionError('Make sure to set topic_model.external_document_ids '
-                                 'before calling topic_model.update_topics().')
-        # get unique topic_id, document_id pairs; keep original order
-        new_topics, self.external_document_ids = list(zip(*dict.fromkeys(zip(new_topics, self.external_document_ids)).keys()))
-        logger.info(f'Number of documents reduced from {len(documents)} to {len(new_topics)} to avoid duplicate '
-                    f'documents within topics after reduction.')
-        indago_id_to_rows = {row['external_id']: row for _, row in documents.iterrows()}
-        documents = pd.DataFrame([indago_id_to_rows[indago_id] for indago_id in self.external_document_ids])
-        documents['ID'] = range(len(documents))  # reset BERTopic document IDs
+        if self._is_zeroshot():
+            try:
+                documents['external_id'] = self.external_document_ids
+            except AttributeError:
+                raise AssertionError('Make sure to set topic_model.external_document_ids '
+                                     'before calling topic_model.update_topics().')
+            # get unique topic_id, document_id pairs; keep original order
+            new_topics, self.external_document_ids = list(zip(*dict.fromkeys(zip(new_topics, self.external_document_ids)).keys()))
+            logger.info(f'Number of documents reduced from {len(documents)} to {len(new_topics)} to avoid duplicate '
+                        f'documents within topics after reduction.')
+            indago_id_to_rows = {row['external_id']: row for _, row in documents.iterrows()}
+            documents = pd.DataFrame([indago_id_to_rows[indago_id] for indago_id in self.external_document_ids])
+            documents['ID'] = range(len(documents))  # reset BERTopic document IDs
 
         # Map topics
         documents.Topic = new_topics
