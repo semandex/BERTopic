@@ -61,10 +61,10 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
-    name="bertopic",
+    name="semandex-bertopic",
     packages=find_packages(exclude=["notebooks", "docs"]),
-    version="0.16.2",
-    author="Maarten P. Grootendorst",
+    version="0.16.2.0",
+    author="Maarten P. Grootendorst, Semandex Networks Inc",
     author_email="maartengrootendorst@gmail.com",
     description="BERTopic performs topic Modeling with state-of-the-art transformer models.",
     long_description=long_description,

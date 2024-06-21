@@ -5,6 +5,25 @@ hide:
 
 # Changelog
 
+## **Version 0.16.2.0**
+*Release date: 21 June, 2024*
+
+<h3><b>Highlights:</a></b></h3>
+
+* Add support for multiple topics per document when zero-shot topic modeling
+  [#1](https://github.com/semandex/BERTopic/issues/1)
+
+<h3><b>Fixes:</a></b></h3>
+
+* Fix downstream operations after zero-shot topic modeling
+  [#2](https://github.com/semandex/BERTopic/issues/2)
+* Validate number of topics when using zero-shot topic modeling
+* Remove check for `type(self.hdbscan_model) != BaseCluster` when checking whether model is zero-shot
+* Derive `self._outliers` rather than tracking it to maintain alignment
+* Derive zero-shot labels when requested rather than tracking it
+* Fix typos related to `topic_to`, `topics_from` for mapping
+* Validate existence of outliers in `reduce_outliers()`
+
 ## **Version 0.16.2**
 *Release date: 12 May, 2024*
 
