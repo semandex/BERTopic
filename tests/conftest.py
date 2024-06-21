@@ -61,6 +61,7 @@ def zeroshot_topic_model(documents, document_embeddings, embedding_model):
     model.umap_model.random_state = 42
     model.hdbscan_model.min_cluster_size = 2
     model.fit(documents, document_embeddings)
+    model.external_document_ids = list(range(len(documents)))
     return model
 
 
