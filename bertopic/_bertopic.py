@@ -4164,9 +4164,11 @@ class BERTopic:
                 raise AssertionError('Make sure to set topic_model.external_document_ids '
                                      'before calling topic_model.update_topics().')
             # get unique topic_id, document_id pairs; keep original order
-            new_topics, self.external_document_ids = list(zip(*dict.fromkeys(zip(new_topics, self.external_document_ids)).keys()))
-            logger.info(f'Number of documents reduced from {len(documents)} to {len(new_topics)} to avoid duplicate '
-                        f'documents within topics after reduction.')
+            new_topics, self.external_document_ids = (
+                list(zip(*dict.fromkeys(zip(new_topics, self.external_document_ids)).keys())))
+            if len(documents) != len(new_topics):
+                logger.info(f'Topic Reduction - Number of documents reduced from {len(documents)} to {len(new_topics)} '
+                            f'to avoid duplicate documents within topics after reduction.')
             indago_id_to_rows = {row['external_id']: row for _, row in documents.iterrows()}
             documents = pd.DataFrame([indago_id_to_rows[indago_id] for indago_id in self.external_document_ids])
             documents['ID'] = range(len(documents))  # reset BERTopic document IDs
@@ -4184,6 +4186,7 @@ class BERTopic:
         # determine whether to take one of the zero-shot topic labels
         # or use a calculated representation.
         if self._is_zeroshot():
+            num_zeroshot_topics_before = len(self.topic_id_to_zeroshot_topic_idx)
             new_topic_id_to_zeroshot_topic_idx = {}
             topics_to_map = {topic_mapping[0]: topic_mapping[1] for topic_mapping in
                              np.array(self.topic_mapper_.mappings_)[:, -2:]}
@@ -4217,12 +4220,16 @@ class BERTopic:
                     new_topic_id_to_zeroshot_topic_idx[topic_to] = zeroshot_topic_ids[best_zeroshot_topic_idx]
 
             self.topic_id_to_zeroshot_topic_idx = new_topic_id_to_zeroshot_topic_idx
+            num_zeroshot_topics_after = len(self.topic_id_to_zeroshot_topic_idx)
+            if num_zeroshot_topics_after != num_zeroshot_topics_before:
+                logger.info(f'Topic Reduction - Number of zero-shot topics reduced from '
+                            f'{num_zeroshot_topics_before} to {num_zeroshot_topics_after} '
+                            f'based on similarity with new topic embeddings')
 
-        # New topic label should be the candidate label if present, else None.
-        # TODO for compatibility, a list of size one or empty list is used.
+        # new topic label should be the candidate label if present, else None.
         self.set_topic_labels([
             self.zeroshot_topic_list[self.topic_id_to_zeroshot_topic_idx[topic_id]]
-            if topic_id in self.topic_id_to_zeroshot_topic_idx else []
+            if topic_id in self.topic_id_to_zeroshot_topic_idx else None
             for topic_id in self.topic_labels_]
         )
 
