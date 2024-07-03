@@ -7,7 +7,7 @@ from bertopic.backend import BaseEmbedder
 
 
 class OpenAIBackend(BaseEmbedder):
-    """ OpenAI Embedding Model
+    """OpenAI Embedding Model.
 
     Arguments:
         client: A `openai.OpenAI` client.
@@ -22,7 +22,6 @@ class OpenAIBackend(BaseEmbedder):
                           deployment_ids.
 
     Examples:
-
     ```python
     import openai
     from bertopic.backend import OpenAIBackend
@@ -31,12 +30,15 @@ class OpenAIBackend(BaseEmbedder):
     openai_embedder = OpenAIBackend(client, "text-embedding-ada-002")
     ```
     """
-    def __init__(self,
-                 client: openai.OpenAI,
-                 embedding_model: str = "text-embedding-ada-002",
-                 delay_in_seconds: float = None,
-                 batch_size: int = None,
-                 generator_kwargs: Mapping[str, Any] = {}):
+
+    def __init__(
+        self,
+        client: openai.OpenAI,
+        embedding_model: str = "text-embedding-ada-002",
+        delay_in_seconds: float = None,
+        batch_size: int = None,
+        generator_kwargs: Mapping[str, Any] = {},
+    ):
         super().__init__()
         self.client = client
         self.embedding_model = embedding_model
@@ -49,11 +51,9 @@ class OpenAIBackend(BaseEmbedder):
         elif not self.generator_kwargs.get("engine"):
             self.generator_kwargs["model"] = self.embedding_model
 
-    def embed(self,
-              documents: List[str],
-              verbose: bool = False) -> np.ndarray:
-        """ Embed a list of n documents/words into an n-dimensional
-        matrix of embeddings
+    def embed(self, documents: List[str], verbose: bool = False) -> np.ndarray:
+        """Embed a list of n documents/words into an n-dimensional
+        matrix of embeddings.
 
         Arguments:
             documents: A list of documents or words to be embedded
@@ -85,4 +85,4 @@ class OpenAIBackend(BaseEmbedder):
 
     def _chunks(self, documents):
         for i in range(0, len(documents), self.batch_size):
-            yield documents[i:i + self.batch_size]
+            yield documents[i : i + self.batch_size]
