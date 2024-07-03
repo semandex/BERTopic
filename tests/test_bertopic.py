@@ -49,6 +49,13 @@ def test_full_model(model, documents, request):
         assert "cuml" in str(type(topic_model.umap_model)).lower()
         assert "cuml" in str(type(topic_model.hdbscan_model)).lower()
 
+    # Update documents for multiple topics per document using zero-shot topic modeling
+    if topic_model._is_zeroshot():
+        documents = sum(
+            [[doc for _ in range(repeat)] for doc, repeat in zip(documents, topic_model.zeroshot_document_multiplier)],
+            [],
+        )
+        topic_model.external_document_ids = list(range(len(documents)))
     topics = topic_model.topics_
 
     for topic in set(topics):
