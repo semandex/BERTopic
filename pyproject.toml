@@ -3,14 +3,15 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "bertopic"
-version = "0.16.2"
+name = "semandex-bertopic"
+version = "0.16.2.0"
 description = "BERTopic performs topic Modeling with state-of-the-art transformer models."
 readme = "README.md"
 license = {file = "LICENSE"}
 requires-python = ">=3.8"
 authors = [
     { name = "Maarten P. Grootendorst", email = "maartengrootendorst@gmail.com" },
+    { name = "Semandex Networks Inc" },
 ]
 keywords = [
     "nlp",
