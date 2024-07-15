@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "semandex-bertopic"
-version = "0.16.2.0"
+version = "0.16.2.1"
 description = "BERTopic performs topic Modeling with state-of-the-art transformer models."
 readme = "README.md"
 license = {file = "LICENSE"}
