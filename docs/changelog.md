@@ -5,6 +5,15 @@ hide:
 
 # Changelog
 
+## **Version 0.16.2.1**
+*Release date: 15 July, 2024*
+
+<h3><b>Fixes:</a></b></h3>
+
+* Fix missing logs even when `verbose=True`
+  [#4](https://github.com/semandex/BERTopic/issues/4)
+
+
 ## **Version 0.16.2.0**
 *Release date: 21 June, 2024*
 
@@ -23,6 +32,7 @@ hide:
 * Derive zero-shot labels when requested rather than tracking it
 * Fix typos related to `topic_to`, `topics_from` for mapping
 * Validate existence of outliers in `reduce_outliers()`
+
 
 ## **Version 0.16.2**
 *Release date: 12 May, 2024*
